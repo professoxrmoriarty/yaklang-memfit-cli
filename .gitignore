@@ -1,0 +1,30 @@
+# macOS
+.DS_Store
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+*.prof
+coverage.out
+
+# Build outputs
+bin/
+build/
+dist/
+yaklang-memfit-cli
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local env files
+.env
+.env.*
+!.env.example
