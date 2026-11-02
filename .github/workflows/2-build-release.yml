@@ -1,0 +1,72 @@
+name: "2. Build & Connect Ecosystem Release"
+
+on:
+  workflow_call:
+    inputs:
+      tag_name:
+        type: string
+        required: false
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag အမည်'
+        required: false
+  push:
+    tags: ['v*-en']
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    name: "Build & Publish (${{ github.event.repository.name }})"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "1. Checkout Translated Source"
+        uses: actions/checkout@v4
+        with:
+          ref: 'english-edition'
+
+      - name: "2. Setup Go & Node.js"
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: "3. Smart Build & Package based on Repo Type"
+        run: |
+          mkdir -p release-assets
+          REPO="${{ github.event.repository.name }}"
+          TAG="${{ inputs.tag_name || github.ref_name }}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+          # 1. VS Code Extension (yaklang-support)
+          if [ "$REPO" = "yaklang-support" ]; then
+            npm install -g @vscode/vsce
+            npm install --legacy-peer-deps || yarn install || true
+            vsce package -o "release-assets/${REPO}-en.vsix" --no-dependencies || true
+
+          # 2. Go Standalone Tools (javajive, yaklang-memfit-cli, OpenXDR)
+          elif [ -f "go.mod" ] && [[ "$REPO" == *"javajive"* || "$REPO" == *"memfit-cli"* || "$REPO" == *"OpenXDR"* ]]; then
+            go mod tidy || true
+            GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o "release-assets/${REPO}_linux_amd64" . || true
+            GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o "release-assets/${REPO}_windows_amd64.exe" . || true
+            GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o "release-assets/${REPO}_darwin_arm64" . || true
+
+          # 3. AI Agent Skills, Training Materials, Benchmarks (Markdown/JSON/Scripts Bundles)
+          else
+            zip -r "release-assets/${REPO}-bundle.zip" . -x "*.git*" "node_modules/*" "release-assets/*"
+          fi
+          ls -lh release-assets/
+        id: pkg
+
+      - name: "4. Publish GitHub Release"
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.pkg.outputs.tag }}
+          name: "${{ github.event.repository.name }} English Edition (${{ steps.pkg.outputs.tag }})"
+          overwrite: true
+          body: "**100% Translated & Synchronized** with the Yaklang English Ecosystem."
+          files: release-assets/*
